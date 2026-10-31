@@ -74,7 +74,7 @@ You need:
 - **About 500 GB of free disk on each computer.** The model files use 385 GB. The first start uses 110 GB more.
 - **About 100 GB of free memory on each computer.** Close other AI programs first.
 - **A network setup** with fixed addresses on the cable link and ssh from the first computer to the second. Do NVIDIA's guide first, then read [our network notes](docs/NETWORK.md).
-- **Software on the head:** Docker with GPU support (DGX OS has it), Python 3, `curl`, `rsync`, and the [Hugging Face CLI](https://huggingface.co/docs/huggingface_hub/guides/cli) (`hf`). The worker needs Docker and `rsync`.
+- **Software on the head:** Docker with GPU support (DGX OS has it), Python 3, `curl`, `rsync`, and the [Hugging Face CLI](https://huggingface.co/docs/huggingface_hub/guides/cli) (`hf`). The worker needs Docker and `rsync`. Podman also works: set `CONTAINER_RT=podman` in `.env` (see [Podman](docs/PODMAN.md)).
 - **Time.** Most of the first setup is the 400 GB download. It takes a few hours on a fast internet link.
 
 In this guide, the *head* is the computer where you type the commands. The *worker* is the second computer.
@@ -283,7 +283,7 @@ Every checksum, file size and computer detail: [PROVENANCE](runs/2026-10-17/PROV
 |---|---|
 | `start.sh`, `stop.sh`, `status.sh`, `verify.sh` | run the server |
 | `scripts/` | download, template fix, setup checks, safe engine install (`_raw_*`: the scripts as they ran on the tested pair) |
-| `docker/` | the engine build |
+| `docker/` | the engine build (runs with podman too, see [docs/PODMAN.md](docs/PODMAN.md)) |
 | `tests/` | the 32 agent tests, the format check, the benchmark, the prompt tests, the Hermes test ([guide](tests/README.md)) |
 | `.github/` | CI (offline tests, ruff, shellcheck, link check), the pull request and issue templates |
 | `runs/2026-10-17/` | every log and result behind this page |

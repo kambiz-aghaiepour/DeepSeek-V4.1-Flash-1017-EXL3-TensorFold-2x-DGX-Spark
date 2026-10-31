@@ -12,6 +12,9 @@ Each release is a git tag. To use a release, run `git checkout vX.Y.Z` before `.
 
 ### Serving
 
+- Podman is supported next to Docker: set `CONTAINER_RT=podman`, and
+  `CONTAINER_RT_SUDO=1` for rootful podman (the system slice, RDMA devices and
+  memlock then behave as they do under Docker). Docker stays the default.
 - Add an optional BF16 uncensored model view, with pinned tensor checks, separate settings and weight-specific caches. The normal model and engine defaults stay the same.
 
 ### Fixed

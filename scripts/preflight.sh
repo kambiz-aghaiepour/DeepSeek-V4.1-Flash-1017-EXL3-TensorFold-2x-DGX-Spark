@@ -15,6 +15,20 @@ wssh true 2>/dev/null && ok "ssh to the worker ($WORKER_SSH)" || { no "ssh to th
 ping -c 2 -W 2 "$WORKER_IP" >/dev/null 2>&1 && ok "the worker answers on the CX7 link ($WORKER_IP)" \
   || no "no answer from $WORKER_IP: check the cable and docs/NETWORK.md"
 
+command -v "$CONTAINER_RT" >/dev/null 2>&1 && ok "$CONTAINER_RT is installed on the head" \
+  || no "$CONTAINER_RT is not installed on the head"
+wssh "command -v $CONTAINER_RT" >/dev/null 2>&1 && ok "$CONTAINER_RT is installed on the worker" \
+  || no "$CONTAINER_RT is not installed on the worker"
+if [ "$CONTAINER_RT_SUDO" = 1 ]; then
+  "${RT_CMD[@]}" info >/dev/null 2>&1 && ok "passwordless sudo $CONTAINER_RT works on the head" \
+    || no "sudo -n $CONTAINER_RT fails on the head: CONTAINER_RT_SUDO=1 needs passwordless sudo"
+  wssh "sudo -n $CONTAINER_RT info" >/dev/null 2>&1 && ok "passwordless sudo $CONTAINER_RT works on the worker" \
+    || no "sudo -n $CONTAINER_RT fails on the worker"
+elif [ "$CONTAINER_RT" = podman ] && [ -n "${CGROUP_PARENT-tensorfold.slice}" ] \
+    && "${RT_CMD[@]}" info --format '{{.Host.Security.Rootless}}' 2>/dev/null | grep -q true; then
+  no "rootless podman cannot join the system slice ${CGROUP_PARENT-tensorfold.slice}: set CONTAINER_RT_SUDO=1 (rootful podman) or CGROUP_PARENT= (the engine may then swap)"
+fi
+
 check_node() {  # $1 = label, $2 = command runner ("" for here, wssh for the worker)
   local who=$1 run=$2 out
   out=$($run bash -s <<EOF
@@ -22,7 +36,7 @@ set -u
 for d in "$MODEL_VIEW/model" "$MODEL_VIEW/engram"; do [ -d "\$d" ] || echo "FAIL missing \$d"; done
 [ -f "$MODEL_VIEW/model/chat_template.jinja" ] || echo "FAIL missing $MODEL_VIEW/model/chat_template.jinja"
 n=\$(ls "$MODEL_VIEW"/model/*.safetensors 2>/dev/null | wc -l); [ "\$n" -ge 43 ] || echo "FAIL \$n of 43 weight shards"
-docker image inspect "$IMAGE" --format '{{.Id}}' 2>/dev/null | sed 's/^/IMAGE /' || echo "FAIL no image $IMAGE"
+$RT_STRING image inspect "$IMAGE" --format '{{.Id}}' 2>/dev/null | sed 's/^/IMAGE /' || echo "FAIL no image $IMAGE"
 for dev in \$(echo "$RDMA_DEVICES" | tr ',' ' '); do
   # The engine's RDMA gather sends 4096-byte packets. RoCE gets that MTU only when the netdev MTU is ~4200 or more
   # (9000 is usual). At the default 1500, the gather fails with "transport retry counter exceeded" (issue #15).
@@ -62,7 +76,7 @@ grep -q '\[never\]' /sys/kernel/mm/transparent_hugepage/enabled 2>/dev/null \
 systemctl is-active -q earlyoom && grep -qF -- "--prefer ^tensorfold " /etc/default/earlyoom 2>/dev/null \
   && echo "OK earlyoom stops the engine before the node runs out of memory" \
   || echo "FAIL earlyoom is not running with the settings of scripts/host_tuning.sh: run it again"
-docker ps --format '{{.Names}}' | grep -q '^tfv41-r' && echo "FAIL a tfv41 rank already runs: ./stop.sh first" || true
+$RT_STRING ps --format '{{.Names}}' | grep -q '^tfv41-r' && echo "FAIL a tfv41 rank already runs: ./stop.sh first" || true
 EOF
 )
   while IFS= read -r line; do
@@ -78,7 +92,7 @@ check_node worker wrun
 if [ -s /tmp/tfv41-image-head ] && cmp -s /tmp/tfv41-image-head /tmp/tfv41-image-worker; then
   ok "both nodes hold $IMAGE ($(cut -c8-19 /tmp/tfv41-image-head))"
 else
-  no "the nodes hold different images (or none) for $IMAGE: run docker/build.sh"
+  no "the nodes hold different images (or none) for $IMAGE: run the image build (docker/build.sh)"
 fi
 rm -f /tmp/tfv41-image-head /tmp/tfv41-image-worker
 ss -ltn | grep -q ":$PORT " && no "port $PORT is in use on the head" || ok "port $PORT is free"

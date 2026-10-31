@@ -6,8 +6,8 @@ set -uo pipefail
 
 mkdir -p "$LOGS"
 stamp=$(date -u +%Y%m%dT%H%M%SZ)
-docker logs tfv41-r0 > "$LOGS/r0-$stamp.log" 2>&1 || true
-wssh "docker logs tfv41-r1" > "$LOGS/r1-$stamp.log" 2>&1 || true
-docker stop -t 60 tfv41-r0 >/dev/null 2>&1; docker rm tfv41-r0 >/dev/null 2>&1
-wssh "docker stop -t 60 tfv41-r1 >/dev/null 2>&1; docker rm tfv41-r1 >/dev/null 2>&1"
+"${RT_CMD[@]}" logs tfv41-r0 > "$LOGS/r0-$stamp.log" 2>&1 || true
+wssh "$RT_STRING logs tfv41-r1" > "$LOGS/r1-$stamp.log" 2>&1 || true
+"${RT_CMD[@]}" stop -t 60 tfv41-r0 >/dev/null 2>&1; "${RT_CMD[@]}" rm tfv41-r0 >/dev/null 2>&1
+wssh "$RT_STRING stop -t 60 tfv41-r1 >/dev/null 2>&1; $RT_STRING rm tfv41-r1 >/dev/null 2>&1"
 log "stopped (logs in $LOGS/*-$stamp.log)"

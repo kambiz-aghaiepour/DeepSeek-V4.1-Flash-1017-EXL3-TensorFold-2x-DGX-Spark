@@ -11,7 +11,7 @@ set -euo pipefail
 cg=${CGROUP_PARENT-tensorfold.slice}
 build_cmd() {
   cat <<EOF
-docker run --rm --gpus all ${cg:+--cgroup-parent $cg} --device /dev/infiniband \
+"${RT_CMD[@]}" run --rm ${GPU_ARGS} ${cg:+--cgroup-parent $cg} --device /dev/infiniband \
   -v $CACHE_DIR:/cache -e TORCH_EXTENSIONS_DIR=/cache/torch_extensions -e CUDA_CACHE_PATH=/cache/nv \
   --entrypoint python3 $IMAGE -c 'from tensorfold.cuda import rdma
 from tensorfold.cuda.exl3 import experts, linear, prefetch

@@ -60,23 +60,71 @@ export UNCENSORED_CACHE_ID
   log "CACHE_DIR must end with the full UNCENSORED_CACHE_ID"; exit 2;
 }
 
-gpu_guard() {
-  local ids id gpu runtime
-  ids=$(docker ps -q) || {
-    echo "cannot list running Docker containers" >&2; return 1;
-  }
+# True (exit 0) when a container in this runtime's store asks for a GPU.
+# docker: the DeviceRequests and Runtime fields. podman: the HostConfig JSON (Devices, CDI annotations),
+# because podman has no DeviceRequests field.
+gpu_containers() {
+  local -a rt=("$@")
+  local ids id gpu runtime config
+  ids=$("${rt[@]}" ps -q 2>/dev/null) || return 2
   for id in $ids; do
-    gpu=$(docker inspect --format '{{range .HostConfig.DeviceRequests}}{{.Count}}{{end}}' "$id") || {
-      echo "cannot inspect GPU requests for Docker container $id" >&2; return 1;
-    }
-    runtime=$(docker inspect --format '{{.HostConfig.Runtime}}' "$id") || {
-      echo "cannot inspect runtime for Docker container $id" >&2; return 1;
-    }
-    if [ -n "$gpu" ] || [ "$runtime" = nvidia ]; then
-      echo "a GPU container is running; stop it with its normal stop command first" >&2
-      return 1
+    if [ "$CONTAINER_RT" = docker ]; then
+      gpu=$("${rt[@]}" inspect --format '{{range .HostConfig.DeviceRequests}}{{.Count}}{{end}}' "$id" 2>/dev/null) || {
+        echo "cannot inspect GPU requests for Docker container $id" >&2; return 1;
+      }
+      runtime=$("${rt[@]}" inspect --format '{{.HostConfig.Runtime}}' "$id" 2>/dev/null) || {
+        echo "cannot inspect runtime for Docker container $id" >&2; return 1;
+      }
+      if [ -n "$gpu" ] || [ "$runtime" = nvidia ]; then
+        echo "a GPU container is running; stop it with its normal stop command first" >&2
+        return 1
+      fi
+    else
+      config=$("${rt[@]}" inspect --format '{{json .HostConfig}}' "$id" 2>/dev/null) || {
+        echo "cannot inspect container $id in the Podman store" >&2; return 1;
+      }
+      if printf '%s' "$config" | python3 -c '
+import json
+import sys
+
+config = json.load(sys.stdin)
+gpu = False
+for device in (config.get("Devices") or []):
+    path = str(device.get("PathOnHost") or "")
+    if path.startswith("/dev/nvidia") or path.startswith("/dev/dri"):
+        gpu = True
+for key in (config.get("Annotations") or {}):
+    if "nvidia.com/gpu" in str(key):
+        gpu = True
+raise SystemExit(0 if gpu else 1)
+'; then
+        echo "a GPU container is running ($id); stop it with its normal stop command first" >&2
+        return 1
+      fi
     fi
   done
+  return 0
+}
+
+gpu_guard() {
+  local rc=0
+  gpu_containers "${RT_CMD[@]}" || rc=$?
+  if [ "$rc" = 2 ]; then
+    echo "cannot list running $RT_LABEL containers" >&2
+    return 1
+  fi
+  [ "$rc" = 0 ] || return 1
+  if [ "$CONTAINER_RT_SUDO" = 1 ] && command -v "$CONTAINER_RT" >/dev/null 2>&1; then
+    # rootful podman has its own store: also look at this user's rootless containers
+    rc=0
+    gpu_containers "$CONTAINER_RT" || rc=$?
+    if [ "$rc" = 2 ]; then
+      echo "cannot list running $RT_LABEL containers" >&2
+      return 1
+    fi
+    [ "$rc" = 0 ] || return 1
+  fi
+  return 0
 }
 
 if [ "$action" = start ]; then
@@ -89,7 +137,7 @@ if [ "$action" = start ]; then
   worker_hash=$(wssh "sha256sum '$MODEL_VIEW/model/override-dealign-bf16.safetensors'" | cut -d ' ' -f1)
   [ "$worker_hash" = "$UNCENSORED_CACHE_ID" ] || { log "worker override differs"; exit 1; }
   gpu_guard
-  wssh "$(declare -f gpu_guard); gpu_guard"
+  wssh "$(declare -f gpu_containers gpu_guard); CONTAINER_RT='$CONTAINER_RT'; CONTAINER_RT_SUDO='$CONTAINER_RT_SUDO'; RT_LABEL='$RT_LABEL'; RT_CMD=($RT_STRING); gpu_guard"
 fi
 
 exec bash "$ROOT/$action.sh"

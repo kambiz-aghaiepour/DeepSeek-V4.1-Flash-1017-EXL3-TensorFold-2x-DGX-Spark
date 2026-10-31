@@ -17,7 +17,7 @@ run_args() {  # $1 = rank. Every TF_DS_* setting below is explained in docs/WHAT
   local r=$1 key=""
   [ -n "${API_KEY_FILE:-}" ] && [ "$r" = 0 ] && key="-v $API_KEY_FILE:/run/keys:ro"   # rank 0 serves HTTP
   cat <<EOF
--d --name tfv41-r$r --restart ${RESTART_POLICY:-no} $( [ -n "${CGROUP_PARENT-tensorfold.slice}" ] && echo "--cgroup-parent ${CGROUP_PARENT-tensorfold.slice}" ) --gpus all --network host --ipc host --shm-size 32g --oom-score-adj 1000
+-d --name tfv41-r$r --restart ${RESTART_POLICY:-no} $( [ -n "${CGROUP_PARENT-tensorfold.slice}" ] && echo "--cgroup-parent ${CGROUP_PARENT-tensorfold.slice}" ) ${GPU_ARGS} --network host --ipc host --shm-size 32g --oom-score-adj 1000
 --ulimit memlock=-1 --ulimit stack=67108864 --device /dev/infiniband --cap-add IPC_LOCK --cap-add SYS_PTRACE
 -v $MODEL_VIEW/model:/model:ro -v $MODEL_VIEW/engram:/engram:ro -v $CACHE_DIR:/cache $key
 -e TF_DS_REPLAY=1 -e TF_DS_REPLAY_FLOOR=1 -e TF_DS_PREFILL_CHUNK=${TF_DS_PREFILL_CHUNK:-2048}
@@ -38,21 +38,21 @@ EOF
 }
 
 log "starting rank 0 on the head ($IMAGE)"
-docker rm -f tfv41-r0 >/dev/null 2>&1 || true
+"${RT_CMD[@]}" rm -f tfv41-r0 >/dev/null 2>&1 || true
 # shellcheck disable=SC2046
-docker run $(run_args 0 | tr '\n' ' ') >/dev/null
+"${RT_CMD[@]}" run $(run_args 0 | tr '\n' ' ') >/dev/null
 for _ in $(seq 1 120); do ss -ltn | grep -q ":$STORE_PORT " && break; sleep 2; done
-ss -ltn | grep -q ":$STORE_PORT " || { log "rank 0 never opened port $STORE_PORT"; docker logs --tail 40 tfv41-r0; exit 1; }
+ss -ltn | grep -q ":$STORE_PORT " || { log "rank 0 never opened port $STORE_PORT"; "${RT_CMD[@]}" logs --tail 40 tfv41-r0; exit 1; }
 
 log "starting rank 1 on the worker ($WORKER_SSH)"
-wssh "docker rm -f tfv41-r1 >/dev/null 2>&1 || true"
-wssh "docker run $(run_args 1 | tr '\n' ' ')" >/dev/null
+wssh "$RT_STRING rm -f tfv41-r1 >/dev/null 2>&1 || true"
+wssh "$RT_STRING run $(run_args 1 | tr '\n' ' ')" >/dev/null
 
 log "waiting for $API/models (the first start writes the rank caches: slow)"
 for _ in $(seq 1 360); do
   healthy && { log "serving $SERVED_NAME at $API"; exit 0; }
-  docker ps --format '{{.Names}}' | grep -q '^tfv41-r0$' || { log "tfv41-r0 exited"; docker logs --tail 60 tfv41-r0; exit 1; }
-  wssh "docker ps --format '{{.Names}}'" | grep -q '^tfv41-r1$' || { log "tfv41-r1 exited"; wssh "docker logs --tail 60 tfv41-r1"; exit 1; }
+  "${RT_CMD[@]}" ps --format '{{.Names}}' | grep -q '^tfv41-r0$' || { log "tfv41-r0 exited"; "${RT_CMD[@]}" logs --tail 60 tfv41-r0; exit 1; }
+  wssh "$RT_STRING ps --format '{{.Names}}'" | grep -q '^tfv41-r1$' || { log "tfv41-r1 exited"; wssh "$RT_STRING logs --tail 60 tfv41-r1"; exit 1; }
   sleep 10
 done
 log "not ready after 60 min"; exit 1
