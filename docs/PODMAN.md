@@ -66,6 +66,9 @@ rootless containers, so a rootless vLLM server still blocks the start.
   /dev/infiniband`, `--ipc host`, `--network host`, `--shm-size`, `--ulimit
   memlock=-1`, `--oom-score-adj`, `--cap-add IPC_LOCK`, `--cap-add SYS_PTRACE`.
 - The RDMA device nodes are `0666`, so a rootless container can open them.
+- Podman refuses `--shm-size` together with `--ipc host`, so the start drops
+  `--shm-size` under podman. Host IPC already gives the container the host
+  `/dev/shm` (half the RAM on DGX OS, about 60 GiB on a 121 GiB node).
 
 Not checked here: a full engine start under podman, which needs the 400 GB
 model and an idle pair.

@@ -39,6 +39,10 @@ fi
 # A display name for messages ("Docker" / "Podman"), so the wording stays readable in both cases.
 RT_LABEL=Docker; [ "$CONTAINER_RT" = podman ] && RT_LABEL=Podman
 GPU_ARGS=${GPU_ARGS:---gpus all}
+# podman refuses --shm-size together with --ipc host ("cannot set shmsize ... in the host IPC namespace").
+# With host IPC the container already uses the host's /dev/shm, which is half the RAM on DGX OS.
+SHM_ARGS_STR="--shm-size 32g"
+[ "$CONTAINER_RT" = podman ] && SHM_ARGS_STR=""
 SAVE_ARGS=()
 [ "$CONTAINER_RT" = podman ] && SAVE_ARGS=(--format docker-archive)
 

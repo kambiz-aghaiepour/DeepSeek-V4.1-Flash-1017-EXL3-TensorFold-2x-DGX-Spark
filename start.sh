@@ -17,7 +17,7 @@ run_args() {  # $1 = rank. Every TF_DS_* setting below is explained in docs/WHAT
   local r=$1 key=""
   [ -n "${API_KEY_FILE:-}" ] && [ "$r" = 0 ] && key="-v $API_KEY_FILE:/run/keys:ro"   # rank 0 serves HTTP
   cat <<EOF
--d --name tfv41-r$r --restart ${RESTART_POLICY:-no} $( [ -n "${CGROUP_PARENT-tensorfold.slice}" ] && echo "--cgroup-parent ${CGROUP_PARENT-tensorfold.slice}" ) ${GPU_ARGS} --network host --ipc host --shm-size 32g --oom-score-adj 1000
+-d --name tfv41-r$r --restart ${RESTART_POLICY:-no} $( [ -n "${CGROUP_PARENT-tensorfold.slice}" ] && echo "--cgroup-parent ${CGROUP_PARENT-tensorfold.slice}" ) ${GPU_ARGS} --network host --ipc host ${SHM_ARGS_STR} --oom-score-adj 1000
 --ulimit memlock=-1 --ulimit stack=67108864 --device /dev/infiniband --cap-add IPC_LOCK --cap-add SYS_PTRACE
 -v $MODEL_VIEW/model:/model:ro -v $MODEL_VIEW/engram:/engram:ro -v $CACHE_DIR:/cache $key
 -e TF_DS_REPLAY=1 -e TF_DS_REPLAY_FLOOR=1 -e TF_DS_PREFILL_CHUNK=${TF_DS_PREFILL_CHUNK:-2048}
