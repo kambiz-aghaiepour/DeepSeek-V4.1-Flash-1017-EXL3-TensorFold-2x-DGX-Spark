@@ -6,7 +6,9 @@ set -euo pipefail
 . "$(dirname "$0")/../scripts/common.sh"
 
 log "building $IMAGE from $TF_REPO @ $TF_COMMIT"
-"${RT_CMD[@]}" build --build-arg TF_REPO="$TF_REPO" --build-arg TF_COMMIT="$TF_COMMIT" -t "$IMAGE" "$ROOT/docker"
+# --network host: the build clones TensorFold, and a host that resolves through a loopback stub
+# (systemd-resolved on 127.0.0.53) has no working DNS inside an isolated build network.
+"${RT_CMD[@]}" build --network host --build-arg TF_REPO="$TF_REPO" --build-arg TF_COMMIT="$TF_COMMIT" -t "$IMAGE" "$ROOT/docker"
 log "copying $IMAGE to the worker ($WORKER_SSH)"
 "${RT_CMD[@]}" save "${SAVE_ARGS[@]}" "$IMAGE" | ssh -o BatchMode=yes "$WORKER_SSH" "$RT_STRING load"
 head_id=$("${RT_CMD[@]}" images "$IMAGE" --format '{{.ID}}')
